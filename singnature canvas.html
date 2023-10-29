@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <title>Signature Pad</title>
+</head>
+<body>
+    <h1 class="title">Signature Pad</h1>
+    
+    <div class="signature-container">
+        <canvas id="signature-pad" width="400" height="200"></canvas>
+        <div class="buttons">
+            <button id="clear-button">Clear</button>
+            <div class="form-group">
+                <label for="name">Name:</label>
+                <input type="text" id="name">
+            </div>
+            <button id="add-button">Add New</button>
+            <button id="save-button" style="display: none;">Save</button>
+        </div>
+    </div>
+    
+    <table class="signature-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Updated Date</th>
+                <th>Signature</th>
+                <th>Edit</th>
+                <th>Delete</th>
+            </tr>
+        </thead>
+        <tbody id="signature-table">
+            <!-- Signature entries will be displayed here -->
+        </tbody>
+    </table>
+    
+    
+        <script>
+        const canvas = document.getElementById('signature-pad');
+        const ctx = canvas.getContext('2d');
+        const clearButton = document.getElementById('clear-button');
+        const addButton = document.getElementById('add-button');
+        const saveButton = document.getElementById('save-button');
+        const nameInput = document.getElementById('name');
+        const signatureTable = document.getElementById('signature-table');
+        let isDrawing = false;
+        let editingEntryIndex = -1;
+        
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            ctx.beginPath();
+            ctx.moveTo(e.clientX - canvas.getBoundingClientRect().left, e.clientY - canvas.getBoundingClientRect().top);
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDrawing) {
+                ctx.lineTo(e.clientX - canvas.getBoundingClientRect().left, e.clientY - canvas.getBoundingClientRect().top);
+                ctx.stroke();
+            }
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+        });
+        
+        clearButton.addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+        
+        addButton.addEventListener('click', () => {
+            const signatureImage = canvas.toDataURL(); // Convert the canvas content to a data URL
+            
+            // Get the name of the signature
+            const name = nameInput.value;
+            
+            if (name) {
+                const updatedDate = new Date().toLocaleString();
+                const signatureEntry = { name, updatedDate, signatureImage };
+                
+                // Retrieve existing entries from local storage or initialize an empty array
+                let signatures = JSON.parse(localStorage.getItem('signatures')) || [];
+                
+                if (editingEntryIndex !== -1) {
+                    // If editing an existing entry, find it and replace with the updated entry
+                    signatures[editingEntryIndex] = signatureEntry;
+                    editingEntryIndex = -1;
+                } else {
+                    // Otherwise, add the new entry
+                    signatures.push(signatureEntry);
+                }
+                
+                // Save the updated entries back to local storage
+                localStorage.setItem('signatures', JSON.stringify(signatures));
+                
+                // Add the new or edited signature to the table
+                if (editingEntryIndex !== -1) {
+                    const row = signatureTable.rows[editingEntryIndex + 1];
+                    row.cells[0].textContent = name;
+                    row.cells[1].textContent = updatedDate;
+                    row.cells[2].innerHTML = `<img src="${signatureImage}" width="100" height="50" />`;
+                } else {
+                    const newRow = signatureTable.insertRow();
+                    newRow.innerHTML = `<td>${name}</td><td>${updatedDate}</td><td><img src="${signatureImage}" width="100" height="50" /></td><td><button onclick="editEntry(${signatureTable.rows.length - 1})">Edit</button></td><td><button onclick="deleteEntry(${signatureTable.rows.length - 1})">Delete</button></td>`;
+                }
+                
+                // Reset the canvas and input field
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                nameInput.value = '';
+                editingEntryIndex = -1;
+            }
+        });
+
+        saveButton.addEventListener('click', () => {
+            // Save the changes for the edited entry
+            const name = nameInput.value;
+            const updatedDate = new Date().toLocaleString();
+            const signatureImage = canvas.toDataURL();
+
+            if (editingEntryIndex !== -1) {
+                const row = signatureTable.rows[editingEntryIndex + 1];
+                row.cells[0].textContent = name;
+                row.cells[1].textContent = updatedDate;
+                row.cells[2].innerHTML = `<img src="${signatureImage}" width="100" height="50" />`;
+
+                // Update the entry in local storage
+                const signatures = JSON.parse(localStorage.getItem('signatures'));
+                signatures[editingEntryIndex] = { name, updatedDate, signatureImage };
+                localStorage.setItem('signatures', JSON.stringify(signatures));
+            }
+
+            // Reset the canvas and input field
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            nameInput.value = '';
+            editingEntryIndex = -1;
+
+            // Hide the Save button
+            saveButton.style.display = 'none';
+        });
+        
+        // Function to edit an existing entry
+        function editEntry(index) {
+            editingEntryIndex = index - 1; // Subtract 1 to account for the table header row
+            const row = signatureTable.rows[index];
+            const name = row.cells[0].textContent;
+            const updatedDate = row.cells[1].textContent;
+            const signatureImage = row.cells[2].querySelector('img').src;
+
+            nameInput.value = name; // Prepopulate the name input field
+            
+            // Populate the canvas with the existing signature
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const img = new Image();
+            img.src = signatureImage;
+            img.onload = function () {
+                ctx.drawImage(img, 0, 0);
+            };
+
+            // Show the Save button
+            saveButton.style.display = 'block';
+        }
+        
+        // Function to delete an entry
+        function deleteEntry(index) {
+            const row = signatureTable.rows[index];
+            const name = row.cells[0].textContent;
+            
+            // Retrieve existing entries from local storage
+            let signatures = JSON.parse(localStorage.getItem('signatures')) || [];
+            
+            // Find and remove the entry by name
+            const indexInStorage = signatures.findIndex(entry => entry.name === name);
+            if (indexInStorage !== -1) {
+                signatures.splice(indexInStorage, 1);
+                // Save the updated entries back to local storage
+                localStorage.setItem('signatures', JSON.stringify(signatures));
+            }
+            
+            // Remove the row from the table
+            signatureTable.deleteRow(index);
+            
+            // Reset the canvas and input field
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            nameInput.value = '';
+            editingEntryIndex = -1;
+            
+            // Hide the Save button
+            saveButton.style.display = 'none';
+        }
+        
+        // Load existing signatures from local storage on page load
+        const savedSignatures = JSON.parse(localStorage.getItem('signatures')) || [];
+        savedSignatures.forEach((entry) => {
+            const newRow = signatureTable.insertRow();
+            newRow.innerHTML = `<td>${entry.name}</td><td>${entry.updatedDate}</td><td><img src="${entry.signatureImage}" width="100" height="50" /></td><td><button onclick="editEntry(${signatureTable.rows.length - 1})">Edit</button></td><td><button onclick="deleteEntry(${signatureTable.rows.length - 1})">Delete</button></td>`;
+        });
+    </script>
+    
+</body>
+</html>
